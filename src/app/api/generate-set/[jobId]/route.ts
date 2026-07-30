@@ -1,7 +1,3 @@
-// app/api/generate-set/[jobId]/route.ts
-//
-// 프론트가 이 라우트를 2초 간격 정도로 폴링해서 진행 상황과 완성된 이미지를 받아간다.
-// 마찬가지로 실제 계산은 안 하고 GPU 서버 상태를 그대로 중계만 한다.
 
 export const maxDuration = 15;
 

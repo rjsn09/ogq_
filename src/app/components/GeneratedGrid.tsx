@@ -222,7 +222,7 @@ export default function GeneratedGrid({ images, isGenerating, progress, title, o
             </>
           ) : (
             <>
-              <span className="text-base">✨</span>
+              <span className="text-base"></span>
               24장 이미지 생성하기
             </>
           )}

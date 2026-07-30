@@ -80,8 +80,6 @@ export default function App() {
     setProgress(0);
 
     try {
-      // 캔버스 필터로 흉내내던 방식 대신, 실제 AI 생성 서버(GPU 서버 + Vercel 프록시)를 호출한다.
-      // description(설명/태그)을 캐릭터 특징 프롬프트로 같이 넘겨서 일관된 캐릭터가 나오도록 함.
       await generateOGQImages(
         uploadedImage,
         (count, images) => {

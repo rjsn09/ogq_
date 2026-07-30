@@ -1,11 +1,3 @@
-// ogqGenerator.ts
-//
-// Vercel에 배포된 /api/generate-set (job 시작) + /api/generate-set/[jobId] (상태 폴링)
-// 라우트를 호출한다. 실제 SDXL 생성은 별도 GPU 서버(emoji_server.py)에서 일어나고,
-// 이 파일은 그 결과를 폴링해서 onProgress로 넘겨주는 역할만 한다.
-//
-// generateOGQImages(imageDataUrl, onProgress) 시그니처는 기존과 동일하게 유지했으므로
-// 이 함수를 부르던 화면 코드는 그대로 써도 된다.
 
 export const VARIANT_NAMES: string[] = [
   '기본', '활짝 웃음', '수줍음', '졸려요', '화났어요', '슬퍼요', '깜짝!', '사랑해요',
@@ -24,14 +16,10 @@ interface JobStatus {
 const POLL_INTERVAL_MS = 2000;
 
 /**
- * 참조 이미지(캐릭터) 1장을 업로드해서 24종 스티커 세트를 생성한다.
- * 내부적으로는:
- *   1) POST /api/generate-set  -> job_id 즉시 발급
- *   2) GET  /api/generate-set/{job_id} 를 완료될 때까지 폴링
  *
- * @param imageDataUrl   참조 이미지 (data:image/... base64)
+ * @param imageDataUrl   참조 이미지
  * @param onProgress     완성된 개수(1~24)가 늘어날 때마다 호출
- * @param characterBase  캐릭터 특징 프롬프트 (예: "blonde girl, white dress, ...")
+ * @param characterBase  캐릭터 특징 프롬프트
  */
 export async function generateOGQImages(
   imageDataUrl: string,

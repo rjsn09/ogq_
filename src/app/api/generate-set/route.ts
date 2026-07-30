@@ -1,16 +1,5 @@
-// app/api/generate-set/route.ts
-//
-// Vercel 서버리스 함수는 GPU도 없고 실행시간도 짧게 제한돼 있어서(Hobby 기본 10~60초),
-// SDXL 24장 생성(수 분 소요)을 이 함수 안에서 직접 돌릴 수 없다.
-//
-// 그래서 이 라우트는 "실제 생성"은 하지 않고, 계속 켜져 있는 GPU 서버(emoji_server.py)에
-// 업로드된 이미지를 그대로 전달해서 작업만 등록시키고, job_id를 즉시 응답한다.
-//
-// 환경변수 설정 (Vercel 프로젝트 Settings -> Environment Variables):
-//   EMOJI_GPU_SERVER_URL = https://<GPU 서버 주소>:8000
-//   (RunPod / Lambda Labs / 자체 GPU 서버 등, emoji_server.py가 uvicorn으로 떠 있는 주소)
 
-export const maxDuration = 30; // 여기서는 job 등록만 하므로 짧아도 충분
+export const maxDuration = 30;
 
 // const GPU_SERVER_URL = process.env.EMOJI_GPU_SERVER_URL;
 const GPU_SERVER_URL = "http://0.0.0.0:8000";
