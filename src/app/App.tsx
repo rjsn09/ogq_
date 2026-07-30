@@ -1,7 +1,8 @@
+import React from "react";
 import { useState, useCallback } from "react";
 import InputPanel from "./components/InputPanel";
 import GeneratedGrid from "./components/GeneratedGrid";
-import { VARIANTS } from "./utils/imageGenerator";
+import { generateOGQImages } from "./lib/ogqGenerator";
 
 function Header() {
   return (
@@ -62,106 +63,6 @@ function StepBadge({ step, label, done }: { step: number; label: string; done: b
   );
 }
 
-async function generateVariantCanvas(
-  imageDataUrl: string,
-  variant: typeof VARIANTS[0]
-): Promise<string> {
-  return new Promise((resolve) => {
-    const canvas = document.createElement('canvas');
-    canvas.width = 360;
-    canvas.height = 360;
-    const ctx = canvas.getContext('2d')!;
-    const img = new Image();
-    img.onload = () => {
-      // Background
-      ctx.fillStyle = variant.bgColor;
-      ctx.fillRect(0, 0, 360, 360);
-
-      // Image sizing
-      const padding = 52;
-      const labelH = 36;
-      const maxW = 360 - padding * 2;
-      const maxH = 360 - padding * 2 - labelH;
-      const scale = Math.min(maxW / img.naturalWidth, maxH / img.naturalHeight);
-      const w = img.naturalWidth * scale;
-      const h = img.naturalHeight * scale;
-
-      // Draw image with transform
-      ctx.save();
-      ctx.translate(180, (360 - labelH) / 2);
-      ctx.rotate((variant.rotate * Math.PI) / 180);
-      if (variant.flipH) ctx.scale(-1, 1);
-      if (variant.filter) ctx.filter = variant.filter;
-      ctx.drawImage(img, -w / 2, -h / 2, w, h);
-      ctx.filter = 'none';
-      ctx.restore();
-
-      // Color overlay
-      if (variant.overlayAlpha > 0 && variant.overlayColor) {
-        ctx.save();
-        ctx.globalAlpha = variant.overlayAlpha;
-        ctx.fillStyle = variant.overlayColor;
-        ctx.fillRect(0, 0, 360, 360);
-        ctx.restore();
-      }
-
-      // Label pill
-      ctx.font = '600 13px "Noto Sans KR", sans-serif';
-      const textW = ctx.measureText(variant.name).width;
-      const pillW = textW + 44;
-      const pillH = 26;
-      const pillX = (360 - pillW) / 2;
-      const pillY = 360 - pillH - 10;
-      const pr = pillH / 2;
-
-      ctx.save();
-      ctx.fillStyle = 'rgba(0,0,0,0.55)';
-      ctx.beginPath();
-      ctx.moveTo(pillX + pr, pillY);
-      ctx.lineTo(pillX + pillW - pr, pillY);
-      ctx.arcTo(pillX + pillW, pillY, pillX + pillW, pillY + pillH, pr);
-      ctx.lineTo(pillX + pillW, pillY + pr);
-      ctx.arcTo(pillX + pillW, pillY + pillH, pillX + pillW - pr, pillY + pillH, pr);
-      ctx.lineTo(pillX + pr, pillY + pillH);
-      ctx.arcTo(pillX, pillY + pillH, pillX, pillY, pr);
-      ctx.lineTo(pillX, pillY + pr);
-      ctx.arcTo(pillX, pillY, pillX + pr, pillY, pr);
-      ctx.closePath();
-      ctx.fill();
-
-      // Emoji
-      ctx.font = '14px sans-serif';
-      ctx.textAlign = 'left';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(variant.emoji, pillX + 10, pillY + pillH / 2);
-
-      // Label text
-      ctx.fillStyle = '#ffffff';
-      ctx.font = '600 13px "Noto Sans KR", sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(variant.name, pillX + 22 + textW / 2 + 6, pillY + pillH / 2);
-      ctx.restore();
-
-      // Number badge
-      ctx.save();
-      ctx.fillStyle = 'rgba(0,0,0,0.4)';
-      ctx.beginPath();
-      ctx.roundRect(10, 10, 28, 20, 10);
-      ctx.fill();
-      ctx.fillStyle = '#ffffff';
-      ctx.font = '700 11px monospace';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(variant.id.toString().padStart(2, '0'), 24, 20);
-      ctx.restore();
-
-      resolve(canvas.toDataURL('image/png'));
-    };
-    img.src = imageDataUrl;
-  });
-}
-
 export default function App() {
   const [uploadedImage, setUploadedImage] = useState<string | null>(null);
   const [title, setTitle] = useState("");
@@ -178,19 +79,24 @@ export default function App() {
     setGeneratedImages([]);
     setProgress(0);
 
-    const results: string[] = [];
     try {
-      for (let i = 0; i < VARIANTS.length; i++) {
-        const dataUrl = await generateVariantCanvas(uploadedImage, VARIANTS[i]);
-        results.push(dataUrl);
-        setGeneratedImages([...results]);
-        setProgress(i + 1);
-        await new Promise(r => setTimeout(r, 50));
-      }
+      // 캔버스 필터로 흉내내던 방식 대신, 실제 AI 생성 서버(GPU 서버 + Vercel 프록시)를 호출한다.
+      // description(설명/태그)을 캐릭터 특징 프롬프트로 같이 넘겨서 일관된 캐릭터가 나오도록 함.
+      await generateOGQImages(
+        uploadedImage,
+        (count, images) => {
+          setProgress(count);
+          setGeneratedImages(images);
+        },
+        description || undefined
+      );
+    } catch (err) {
+      console.error("이모티콘 생성 실패:", err);
+      alert(`생성 중 오류가 발생했습니다: ${(err as Error).message}`);
     } finally {
       setIsGenerating(false);
     }
-  }, [uploadedImage, title]);
+  }, [uploadedImage, title, description]);
 
   const isReady = !!uploadedImage && !!title.trim();
 

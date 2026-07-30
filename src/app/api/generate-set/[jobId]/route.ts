@@ -5,7 +5,8 @@
 
 export const maxDuration = 15;
 
-const GPU_SERVER_URL = process.env.EMOJI_GPU_SERVER_URL;
+// const GPU_SERVER_URL = process.env.EMOJI_GPU_SERVER_URL;
+const GPU_SERVER_URL = "http://0.0.0.0:8000";
 
 export async function GET(
   _req: Request,

@@ -12,7 +12,8 @@
 
 export const maxDuration = 30; // 여기서는 job 등록만 하므로 짧아도 충분
 
-const GPU_SERVER_URL = process.env.EMOJI_GPU_SERVER_URL;
+// const GPU_SERVER_URL = process.env.EMOJI_GPU_SERVER_URL;
+const GPU_SERVER_URL = "http://0.0.0.0:8000";
 
 export async function POST(req: Request) {
   if (!GPU_SERVER_URL) {

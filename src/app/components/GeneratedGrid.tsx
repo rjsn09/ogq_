@@ -1,91 +1,289 @@
-// ogqGenerator.ts
-//
-// Vercel에 배포된 /api/generate-set (job 시작) + /api/generate-set/[jobId] (상태 폴링)
-// 라우트를 호출한다. 실제 SDXL 생성은 별도 GPU 서버(emoji_server.py)에서 일어나고,
-// 이 파일은 그 결과를 폴링해서 onProgress로 넘겨주는 역할만 한다.
-//
-// generateOGQImages(imageDataUrl, onProgress) 시그니처는 기존과 동일하게 유지했으므로
-// 이 함수를 부르던 화면 코드는 그대로 써도 된다.
+import { useState, useCallback } from "react";
+import { Download, ZoomIn, X, CheckSquare, Square, ChevronLeft, ChevronRight } from "lucide-react";
+import { VARIANTS } from "../utils/imageGenerator";
 
-export const VARIANT_NAMES: string[] = [
-  '기본', '활짝 웃음', '수줍음', '졸려요', '화났어요', '슬퍼요', '깜짝!', '사랑해요',
-  '생각중', '굿!', 'OK!', '파이팅!', '하하하', '당황', '신남!', '힘들어요',
-  '배고파', '냠냠', '잘게요', '안녕!', '감사해요', '미안해요', '응원해요', '최고야!',
-];
-
-interface JobStatus {
-  status: 'running' | 'done' | 'error';
-  completed: number;
-  total: number;
-  images: { index: number; name: string; image: string }[];
-  error?: string;
+interface GeneratedGridProps {
+  images: string[];
+  isGenerating: boolean;
+  progress: number;
+  title: string;
+  onGenerate?: () => void;
+  isReady?: boolean;
 }
 
-const POLL_INTERVAL_MS = 2000;
+export default function GeneratedGrid({ images, isGenerating, progress, title, onGenerate, isReady }: GeneratedGridProps) {
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [lightboxIdx, setLightboxIdx] = useState<number | null>(null);
+  const isAllSelected = selectedIds.size === images.length && images.length > 0;
 
-/**
- * 참조 이미지(캐릭터) 1장을 업로드해서 24종 스티커 세트를 생성한다.
- * 내부적으로는:
- *   1) POST /api/generate-set  -> job_id 즉시 발급
- *   2) GET  /api/generate-set/{job_id} 를 완료될 때까지 폴링
- *
- * @param imageDataUrl   참조 이미지 (data:image/... base64)
- * @param onProgress     완성된 개수(1~24)가 늘어날 때마다 호출
- * @param characterBase  캐릭터 특징 프롬프트 (예: "blonde girl, white dress, ...")
- */
-export async function generateOGQImages(
-  imageDataUrl: string,
-  onProgress?: (count: number) => void,
-  characterBase?: string
-): Promise<string[]> {
-  const refBlob = await (await fetch(imageDataUrl)).blob();
-
-  const formData = new FormData();
-  formData.append('image', refBlob, 'ref.png');
-  if (characterBase) {
-    formData.append('character_base', characterBase);
-  }
-
-  const startRes = await fetch('/api/generate-set', {
-    method: 'POST',
-    body: formData,
-  });
-
-  if (!startRes.ok) {
-    const body = await startRes.json().catch(() => ({}));
-    throw new Error(body.error ?? `작업 시작 실패 (${startRes.status})`);
-  }
-
-  const { job_id } = (await startRes.json()) as { job_id: string };
-
-  const results: string[] = new Array(VARIANT_NAMES.length).fill('');
-
-  while (true) {
-    await sleep(POLL_INTERVAL_MS);
-
-    const statusRes = await fetch(`/api/generate-set/${job_id}`, {
-      cache: 'no-store',
+  const toggleSelect = useCallback((id: number) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
     });
+  }, []);
 
-    if (!statusRes.ok) {
-      const body = await statusRes.json().catch(() => ({}));
-      throw new Error(body.error ?? `작업 상태 조회 실패 (${statusRes.status})`);
-    }
+  const selectAll = useCallback(() => {
+    if (isAllSelected) setSelectedIds(new Set());
+    else setSelectedIds(new Set(images.map((_, i) => i)));
+  }, [images, isAllSelected]);
 
-    const job = (await statusRes.json()) as JobStatus;
+  const downloadImage = useCallback((dataUrl: string, idx: number) => {
+    const a = document.createElement("a");
+    a.href = dataUrl;
+    a.download = `${title || 'ogq_sticker'}_${String(idx + 1).padStart(2, '0')}.png`;
+    a.click();
+  }, [title]);
 
-    for (const item of job.images) {
-      results[item.index - 1] = item.image;
-    }
-    onProgress?.(job.completed);
+  const downloadSelected = useCallback(() => {
+    const targets = selectedIds.size > 0 ? [...selectedIds] : images.map((_, i) => i);
+    targets.forEach((idx, i) => {
+      setTimeout(() => downloadImage(images[idx], idx), i * 120);
+    });
+  }, [selectedIds, images, downloadImage]);
 
-    if (job.status === 'done') break;
-    if (job.status === 'error') throw new Error(job.error ?? '생성 중 오류가 발생했습니다.');
-  }
+  const hasImages = images.length > 0;
 
-  return results;
-}
+  return (
+    <div className="flex flex-col gap-4">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <h2 className="text-foreground" style={{fontWeight:600}}>미리보기</h2>
+          {hasImages && (
+            <span className="px-2.5 py-0.5 rounded-full bg-primary text-primary-foreground text-xs" style={{fontWeight:700}}>
+              {images.length}/24
+            </span>
+          )}
+        </div>
+        {hasImages && (
+          <div className="flex items-center gap-2">
+            <button
+              onClick={selectAll}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-border bg-card text-foreground text-xs hover:bg-muted transition-colors"
+              style={{fontWeight:500}}
+            >
+              {isAllSelected ? <CheckSquare size={13} className="text-primary" /> : <Square size={13} />}
+              {isAllSelected ? '전체 해제' : '전체 선택'}
+            </button>
+            <button
+              onClick={downloadSelected}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary text-primary-foreground text-xs hover:brightness-105 transition-all shadow-sm shadow-primary/20"
+              style={{fontWeight:600}}
+            >
+              <Download size={13} />
+              {selectedIds.size > 0 ? `${selectedIds.size}장 다운로드` : '전체 다운로드'}
+            </button>
+          </div>
+        )}
+      </div>
 
-function sleep(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+      {/* Progress bar */}
+      {isGenerating && (
+        <div className="bg-card rounded-2xl border border-border p-5 flex flex-col gap-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin shrink-0" />
+              <p className="text-foreground text-sm" style={{fontWeight:500}}>
+                이미지 생성 중...
+              </p>
+            </div>
+            <span className="text-primary text-sm" style={{fontWeight:700}}>{progress}/24</span>
+          </div>
+          <div className="h-2 bg-muted rounded-full overflow-hidden">
+            <div
+              className="h-full bg-primary rounded-full transition-all duration-300"
+              style={{ width: `${(progress / 24) * 100}%` }}
+            />
+          </div>
+          <p className="text-muted-foreground text-xs">
+            {progress < 24 && VARIANTS[progress] ? `"${VARIANTS[progress].name}" 생성 중...` : '완료 중...'}
+          </p>
+        </div>
+      )}
+
+      {/* Grid */}
+      <div className="bg-card rounded-2xl border border-border overflow-hidden">
+        {!hasImages && !isGenerating ? (
+          <div className="p-6">
+            <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(6, 1fr)' }}>
+              {Array.from({ length: 24 }).map((_, i) => (
+                <div
+                  key={i}
+                  className="rounded-xl bg-muted border-2 border-dashed border-border flex items-center justify-center"
+                  style={{ aspectRatio: '1/1' }}
+                >
+                  <span className="text-muted-foreground text-xs opacity-60" style={{fontWeight:500}}>
+                    {String(i + 1).padStart(2, '0')}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div className="p-4">
+            <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(6, 1fr)' }}>
+              {Array.from({ length: 24 }).map((_, i) => {
+                const img = images[i];
+                const isSelected = selectedIds.has(i);
+                const variant = VARIANTS[i];
+
+                if (!img) {
+                  return (
+                    <div
+                      key={i}
+                      className="rounded-xl bg-muted flex items-center justify-center overflow-hidden relative"
+                      style={{ aspectRatio: '1/1' }}
+                    >
+                      {isGenerating && (
+                        <div className="w-5 h-5 border-2 border-primary/40 border-t-primary rounded-full animate-spin" />
+                      )}
+                    </div>
+                  );
+                }
+
+                return (
+                  <div
+                    key={i}
+                    className={`relative rounded-xl overflow-hidden cursor-pointer group transition-all duration-150 ${
+                      isSelected
+                        ? 'ring-2 ring-primary ring-offset-1 ring-offset-card'
+                        : 'hover:ring-2 hover:ring-primary/40 hover:ring-offset-1 hover:ring-offset-card'
+                    }`}
+                    style={{ aspectRatio: '1/1' }}
+                    onClick={() => toggleSelect(i)}
+                  >
+                    <img src={img} alt={variant?.name} className="w-full h-full object-cover" />
+
+                    {/* Hover overlay */}
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setLightboxIdx(i); }}
+                        className="w-7 h-7 rounded-full bg-white/90 text-foreground flex items-center justify-center hover:bg-white transition-colors shadow-sm"
+                      >
+                        <ZoomIn size={13} />
+                      </button>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); downloadImage(img, i); }}
+                        className="w-7 h-7 rounded-full bg-white/90 text-foreground flex items-center justify-center hover:bg-white transition-colors shadow-sm"
+                      >
+                        <Download size={13} />
+                      </button>
+                    </div>
+
+                    {/* Selected indicator */}
+                    {isSelected && (
+                      <div className="absolute top-1 right-1 w-5 h-5 rounded-full bg-primary flex items-center justify-center shadow-sm">
+                        <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
+                          <path d="M1 4L4 7L9 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {hasImages && (
+              <div className="mt-4 pt-4 border-t border-border flex items-center justify-between">
+                <p className="text-muted-foreground text-xs">
+                  {selectedIds.size > 0
+                    ? <><strong className="text-foreground">{selectedIds.size}장</strong> 선택됨</>
+                    : '이미지를 클릭하여 선택하세요'
+                  }
+                </p>
+                <div className="flex items-center gap-3">
+                  <span className="text-muted-foreground text-xs">360 × 360px • PNG</span>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Generate button below grid */}
+      {onGenerate && (
+        <button
+          onClick={onGenerate}
+          disabled={!isReady || isGenerating}
+          className={`w-full py-3.5 rounded-2xl text-sm transition-all duration-200 flex items-center justify-center gap-2.5 ${
+            isReady && !isGenerating
+              ? 'bg-primary text-primary-foreground hover:brightness-105 active:scale-[0.99] shadow-md shadow-primary/25'
+              : 'bg-muted text-muted-foreground cursor-not-allowed'
+          }`}
+          style={{ fontWeight: 700, letterSpacing: '0.01em' }}
+        >
+          {isGenerating ? (
+            <>
+              <span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+              24장 생성 중...
+            </>
+          ) : (
+            <>
+              <span className="text-base">✨</span>
+              24장 이미지 생성하기
+            </>
+          )}
+        </button>
+      )}
+
+      {/* Lightbox */}
+      {lightboxIdx !== null && images[lightboxIdx] && (
+        <div
+          className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-8"
+          onClick={() => setLightboxIdx(null)}
+        >
+          <div
+            className="relative bg-card rounded-2xl overflow-hidden shadow-2xl max-w-sm w-full"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-5 py-3.5 border-b border-border flex items-center justify-between">
+              <div>
+                <p className="text-foreground text-sm" style={{fontWeight:600}}>
+                  {String(lightboxIdx + 1).padStart(2, '0')}. {VARIANTS[lightboxIdx]?.name}
+                </p>
+                <p className="text-muted-foreground text-xs">360 × 360px</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => downloadImage(images[lightboxIdx], lightboxIdx)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary text-primary-foreground text-xs hover:brightness-105 transition-all"
+                  style={{fontWeight:600}}
+                >
+                  <Download size={12} />
+                  다운로드
+                </button>
+                <button onClick={() => setLightboxIdx(null)} className="text-muted-foreground hover:text-foreground transition-colors p-1 rounded-lg hover:bg-muted">
+                  <X size={18} />
+                </button>
+              </div>
+            </div>
+            <div className="p-4 bg-[#f0f0f0]">
+              <img src={images[lightboxIdx]} alt="" className="w-full rounded-xl" />
+            </div>
+            {/* Navigation */}
+            <div className="px-4 py-3 border-t border-border flex items-center justify-between">
+              <button
+                onClick={() => setLightboxIdx(Math.max(0, lightboxIdx - 1))}
+                disabled={lightboxIdx === 0}
+                className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                <ChevronLeft size={16} />이전
+              </button>
+              <span className="text-muted-foreground text-xs">{lightboxIdx + 1} / {images.length}</span>
+              <button
+                onClick={() => setLightboxIdx(Math.min(images.length - 1, lightboxIdx + 1))}
+                disabled={lightboxIdx >= images.length - 1}
+                className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                다음<ChevronRight size={16} />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
