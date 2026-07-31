@@ -42,9 +42,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       },
       body: rawBody,
     });
-  } catch (err) {
+  } catch (err: any) {
+    console.error("Fetch Detail Error:", err?.cause || err);
+
     res.status(502).json({
-      error: `서버에 연결할 수 없습니다: ${(err as Error).message}`,
+      error: `서버에 연결할 수 없습니다: ${err.message} (원인: ${err?.cause?.code || '알 수 없음'})`,
     });
     return;
   }
