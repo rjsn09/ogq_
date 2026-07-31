@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
-const SERVER_URL = "https://romeo-bannerless-calmingly.ngrok-free.dev";
+const SERVER_URL = process.env.SERVER_URL || "https://romeo-bannerless-calmingly.ngrok-free.dev";
 
 function readRawBody(req: VercelRequest): Promise<Buffer> {
   return new Promise((resolve, reject) => {
@@ -36,7 +36,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     gpuRes = await fetch(`${SERVER_URL}/api/generate-set`, {
       method: 'POST',
-      headers: { 'content-type': contentType },
+      headers: { 
+        'content-type': contentType,
+        'ngrok-skip-browser-warning': '69420',  // ngrok 헤더
+      },
       body: rawBody,
     });
   } catch (err) {

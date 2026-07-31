@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
-const SERVER_URL = "https://romeo-bannerless-calmingly.ngrok-free.dev";
+const SERVER_URL = process.env.SERVER_URL || "https://romeo-bannerless-calmingly.ngrok-free.dev";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'GET') {
