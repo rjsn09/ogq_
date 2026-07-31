@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
-const SERVER_URL = process.env.SERVER_URL || "https://romeo-bannerless-calmingly.ngrok-free.dev";
+const SERVER_URL = "https://romeo-bannerless-calmingly.ngrok-free.dev";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'GET') {
@@ -17,9 +17,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const { jobId } = req.query;
 
-  let Res: Response;
+  let gpuRes: Response;
   try {
-    Res = await fetch(`${SERVER_URL}/api/generate-set/${jobId}`, {
+    gpuRes = await fetch(`${SERVER_URL}/api/generate-set/${jobId}`, {
       cache: 'no-store',
       headers: {
         'ngrok-skip-browser-warning': '69420',
@@ -32,6 +32,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return;
   }
 
-  const data = await Res.json();
-  res.status(Res.status).json(data);
+  const data = await gpuRes.json();
+  res.status(gpuRes.status).json(data);
 }
