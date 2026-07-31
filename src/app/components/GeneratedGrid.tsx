@@ -81,6 +81,7 @@ export default function GeneratedGrid({
 
   const hasImages = filledCount > 0;
 
+  // 하단 생성 버튼 라벨/활성 여부 계산
   const generateLabel = useMemo(() => {
     if (isGenerating) return `생성 중...`;
     if (selectedIds.size > 0) {
