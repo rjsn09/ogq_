@@ -39,12 +39,69 @@ export default function InputPanel({
   const [isDragging, setIsDragging] = useState(false);
   const [tagInput, setTagInput] = useState("");
 
-  const processFile = useCallback((file: File) => {
-    if (!file.type.startsWith("image/")) return;
-    const reader = new FileReader();
-    reader.onload = (e) => setUploadedImage(e.target?.result as string);
-    reader.readAsDataURL(file);
-  }, [setUploadedImage]);
+  const [isProcessingImage, setIsProcessingImage] = useState(false);
+  const [imageError, setImageError] = useState<string | null>(null);
+
+  const resizeImage = useCallback((file: File, maxDimension = 1024, quality = 0.85): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const objectUrl = URL.createObjectURL(file);
+      const img = new Image();
+
+      img.onload = () => {
+        let { width, height } = img;
+        if (width > height && width > maxDimension) {
+          height = Math.round(height * (maxDimension / width));
+          width = maxDimension;
+        } else if (height >= width && height > maxDimension) {
+          width = Math.round(width * (maxDimension / height));
+          height = maxDimension;
+        }
+
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        URL.revokeObjectURL(objectUrl);
+
+        if (!ctx) {
+          reject(new Error("캔버스를 생성할 수 없습니다."));
+          return;
+        }
+
+        ctx.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL("image/jpeg", quality));
+      };
+
+      img.onerror = () => {
+        URL.revokeObjectURL(objectUrl);
+        reject(new Error("이미지를 불러올 수 없습니다."));
+      };
+
+      img.src = objectUrl;
+    });
+  }, []);
+
+  const processFile = useCallback(async (file: File) => {
+    if (!file.type.startsWith("image/")) {
+      setImageError("이미지 파일만 업로드할 수 있습니다.");
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      setImageError("파일 용량은 최대 10MB까지 업로드할 수 있습니다.");
+      return;
+    }
+
+    setImageError(null);
+    setIsProcessingImage(true);
+    try {
+      const resizedDataUrl = await resizeImage(file);
+      setUploadedImage(resizedDataUrl);
+    } catch (err) {
+      setImageError(err instanceof Error ? err.message : "이미지 처리 중 오류가 발생했습니다.");
+    } finally {
+      setIsProcessingImage(false);
+    }
+  }, [resizeImage, setUploadedImage]);
 
   const handleDrop = useCallback((e: DragEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -98,7 +155,17 @@ export default function InputPanel({
           )}
         </div>
         <div className="p-4">
-          {uploadedImage ? (
+          {isProcessingImage ? (
+            <div
+              className="border-2 border-dashed border-border rounded-xl flex flex-col items-center justify-center gap-3"
+              style={{ aspectRatio: '16/9', minHeight: 160 }}
+            >
+              <div className="w-12 h-12 rounded-2xl flex items-center justify-center bg-muted text-muted-foreground animate-pulse">
+                <Upload size={22} />
+              </div>
+              <p className="text-muted-foreground text-sm">이미지 최적화 중...</p>
+            </div>
+          ) : uploadedImage ? (
             <div className="relative rounded-xl overflow-hidden bg-muted" style={{aspectRatio:'1/1'}}>
               <img src={uploadedImage} alt="업로드된 이미지" className="w-full h-full object-contain" />
               <div className="absolute inset-0 bg-black/0 hover:bg-black/10 transition-colors" />
@@ -124,6 +191,9 @@ export default function InputPanel({
                 <p className="text-muted-foreground text-sm mt-0.5">PNG, JPG, WebP • 최대 10MB</p>
               </div>
             </div>
+          )}
+          {imageError && (
+            <p className="text-destructive text-xs mt-2">{imageError}</p>
           )}
           <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
         </div>
