@@ -35,6 +35,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return;
   }
 
-  const data = await gpuRes.json();
+  const text = await gpuRes.text();
+
+  let contentType = gpuRes.headers.get('content-type') ?? '';
+
+  if (!contentType.includes('application/json')) {
+    console.error('Non-JSON response from backend:', gpuRes.status, text.slice(0, 500));
+    res.status(gpuRes.status >= 400 ? gpuRes.status : 502).json({
+      error: `백엔드 서버가 예상치 못한 응답을 반환했습니다 (status ${gpuRes.status}).`,
+    });
+    return;
+  }
+
+  let data: unknown;
+  try {
+    data = JSON.parse(text);
+  } catch (err) {
+    console.error('JSON parse failed:', text.slice(0, 500));
+    res.status(502).json({ error: '백엔드 응답을 파싱하지 못했습니다.' });
+    return;
+  }
+
   res.status(gpuRes.status).json(data);
 }
