@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo } from "react";
-import { Download, ZoomIn, X, CheckSquare, Square, ChevronLeft, ChevronRight, RotateCw, Check } from "lucide-react";
+import { Download, ZoomIn, X, CheckSquare, Square, ChevronLeft, ChevronRight, RotateCw } from "lucide-react";
 import { VARIANT_CATALOG, DEFAULT_VARIANTS, Variant } from "../utils/imageGenerator";
 
 interface GeneratedGridProps {
@@ -177,21 +177,18 @@ export default function GeneratedGrid({
                 return (
                   <div
                     key={i}
-                    className={`relative rounded-xl bg-muted border-2 flex flex-col items-center justify-center gap-1.5 p-1.5 transition-colors ${
-                      isSelected ? "border-primary" : "border-dashed border-border"
-                    }`}
+                    className={`relative rounded-xl bg-muted flex flex-col items-center justify-center gap-1.5 p-1.5 transition-all duration-150 ${
+                      isSelected
+                        ? "ring-2 ring-primary ring-offset-1 ring-offset-card"
+                        : "border-2 border-dashed border-border hover:ring-2 hover:ring-primary/40 hover:ring-offset-1 hover:ring-offset-card"
+                    } ${isSlotGenerating ? "" : "cursor-pointer"}`}
                     style={{ aspectRatio: "1/1" }}
+                    onClick={() => !isSlotGenerating && toggleSelect(i)}
                   >
                     {isSlotGenerating ? (
                       <div className="w-5 h-5 border-2 border-primary/40 border-t-primary rounded-full animate-spin" />
                     ) : (
                       <>
-                        <button
-                          onClick={() => toggleSelect(i)}
-                          className="absolute top-1 left-1 w-4 h-4 rounded flex items-center justify-center border border-border bg-card hover:border-primary transition-colors"
-                        >
-                          {isSelected && <Check size={11} className="text-primary" />}
-                        </button>
                         <span className="text-muted-foreground text-[10px] opacity-60" style={{ fontWeight: 500 }}>
                           {String(i + 1).padStart(2, "0")}
                         </span>
@@ -199,7 +196,8 @@ export default function GeneratedGrid({
                           value={variant.id}
                           onChange={(e) => onVariantChange(i, e.target.value)}
                           onClick={(e) => e.stopPropagation()}
-                          className="w-[90%] max-w-[84px] text-[10px] bg-card border border-border rounded-md px-1 py-0.5 text-foreground truncate"
+                          className="w-[90%] max-w-[84px] text-[10px] bg-card border border-primary/25 rounded-full px-2.5 py-1 text-foreground truncate text-center hover:border-primary focus:border-primary focus:outline-none transition-colors"
+                          style={{ fontWeight: 500 }}
                         >
                           {VARIANT_CATALOG.map((v) => (
                             <option key={v.id} value={v.id}>
@@ -207,6 +205,15 @@ export default function GeneratedGrid({
                             </option>
                           ))}
                         </select>
+
+                        {/* Selected indicator */}
+                        {isSelected && (
+                          <div className="absolute top-1 right-1 w-5 h-5 rounded-full bg-primary flex items-center justify-center shadow-sm">
+                            <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
+                              <path d="M1 4L4 7L9 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                            </svg>
+                          </div>
+                        )}
                       </>
                     )}
                   </div>
@@ -267,11 +274,14 @@ export default function GeneratedGrid({
                   </div>
 
                   {/* Variant label / selector (bottom) */}
-                  <div className="absolute bottom-0 inset-x-0 bg-black/55 px-1 py-0.5" onClick={(e) => e.stopPropagation()}>
+                  <div
+                    className="absolute bottom-1 inset-x-1 flex justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                    onClick={(e) => e.stopPropagation()}
+                  >
                     <select
                       value={variant.id}
                       onChange={(e) => onVariantChange(i, e.target.value)}
-                      className="w-full text-[10px] bg-transparent text-white border-none outline-none truncate"
+                      className="w-[90%] text-[10px] bg-white/90 text-foreground border border-primary/25 rounded-full px-2.5 py-0.5 outline-none truncate text-center hover:border-primary focus:border-primary transition-colors"
                       style={{ fontWeight: 600 }}
                     >
                       {VARIANT_CATALOG.map((v) => (
