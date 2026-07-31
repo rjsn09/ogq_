@@ -15,11 +15,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return;
   }
 
-  const { jobId } = req.query;
+  const { jobId, since } = req.query;
+  const sinceParam = typeof since === 'string' ? since : '0';
 
   let gpuRes: Response;
   try {
-    gpuRes = await fetch(`${SERVER_URL}/api/generate-set/${jobId}`, {
+    gpuRes = await fetch(`${SERVER_URL}/api/generate-set/${jobId}?since=${encodeURIComponent(sinceParam)}`, {
       cache: 'no-store',
       headers: {
         'ngrok-skip-browser-warning': '69420',
