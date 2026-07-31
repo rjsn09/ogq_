@@ -1,9 +1,6 @@
+import { VARIANT_CATALOG, DEFAULT_VARIANTS } from '../utils/imageGenerator';
 
-export const VARIANT_NAMES: string[] = [
-  '기본', '활짝 웃음', '수줍음', '졸려요', '화났어요', '슬퍼요', '깜짝!', '사랑해요',
-  '생각중', '굿!', 'OK!', '파이팅!', '하하하', '당황', '신남!', '힘들어요',
-  '배고파', '냠냠', '잘게요', '안녕!', '감사해요', '미안해요', '응원해요', '최고야!',
-];
+export const VARIANT_NAMES: string[] = DEFAULT_VARIANTS.map((v) => v.name);
 
 interface JobStatus {
   status: 'running' | 'done' | 'error';
@@ -16,23 +13,36 @@ interface JobStatus {
 const POLL_INTERVAL_MS = 2000;
 
 /**
+ * @param imageDataUrl
+ * @param onProgress
+ * @param characterBase
+ * @param indices
+ * @param variantAssignments
  *
- * @param imageDataUrl   참조 이미지
- * @param onProgress     완성된 개수(1~24)가 늘어날 때마다 호출
- * @param characterBase  캐릭터 특징 프롬프트
  */
 export async function generateOGQImages(
   imageDataUrl: string,
   onProgress?: (count: number, images: string[]) => void,
-  characterBase?: string
+  characterBase?: string,
+  indices?: number[],
+  variantAssignments?: Record<number, string>
 ): Promise<string[]> {
   const refBlob = await (await fetch(imageDataUrl)).blob();
+
+  const targetIndices = indices && indices.length > 0 ? indices : VARIANT_CATALOG.slice(0, 24).map((_, i) => i + 1);
+
+  const names: Record<number, string> = {};
+  for (const idx of targetIndices) {
+    names[idx] = variantAssignments?.[idx] ?? DEFAULT_VARIANTS[idx - 1]?.name ?? `이모티콘 ${idx}`;
+  }
 
   const formData = new FormData();
   formData.append('image', refBlob, 'ref.png');
   if (characterBase) {
     formData.append('character_base', characterBase);
   }
+  formData.append('indices', JSON.stringify(targetIndices));
+  formData.append('variant_names', JSON.stringify(names));
 
   const startRes = await fetch('/api/generate-set', {
     method: 'POST',
@@ -46,7 +56,7 @@ export async function generateOGQImages(
 
   const { job_id } = (await startRes.json()) as { job_id: string };
 
-  const results: string[] = new Array(VARIANT_NAMES.length).fill('');
+  const results: string[] = new Array(24).fill('');
 
   while (true) {
     await sleep(POLL_INTERVAL_MS);
@@ -72,6 +82,16 @@ export async function generateOGQImages(
   }
 
   return results;
+}
+
+export function regenerateOGQImages(
+  imageDataUrl: string,
+  slotIndices: number[],
+  variantAssignments: Record<number, string>,
+  onProgress?: (count: number, images: string[]) => void,
+  characterBase?: string
+): Promise<string[]> {
+  return generateOGQImages(imageDataUrl, onProgress, characterBase, slotIndices, variantAssignments);
 }
 
 function sleep(ms: number) {
