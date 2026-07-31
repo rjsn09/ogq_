@@ -9,12 +9,16 @@ function Header() {
     <header className="bg-card border-b border-border sticky top-0 z-40">
       <div className="max-w-[1400px] mx-auto px-6 h-14 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-xl bg-primary flex items-center justify-center shadow-sm shadow-primary/30">
-            <span className="text-primary-foreground text-sm">✨</span>
+          <div className="w-8 h-8 rounded-xl overflow-hidden shadow-sm shadow-primary/30">
+            <img 
+              src="ogqIcon.png" 
+              alt="아이콘" 
+              className="w-full h-full object-cover"
+            />
           </div>
           <div className="flex items-baseline gap-2">
             <span className="text-foreground" style={{ fontWeight: 700, fontSize: '1rem' }}>
-              OGQ 이미지 생성기
+              이모티콘 생성기
             </span>
             <span className="text-muted-foreground text-xs hidden sm:inline">
               네이버 OGQ 마켓 · 24장 자동 생성
