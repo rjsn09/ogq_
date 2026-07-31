@@ -87,7 +87,7 @@ export default function GeneratedGrid({ images, isGenerating, progress, title, o
             <div className="flex items-center gap-2">
               <span className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin shrink-0" />
               <p className="text-foreground text-sm" style={{fontWeight:500}}>
-                이미지 생성 중...
+                이미지 생성 중... (예상시간 12분)
               </p>
             </div>
             <span className="text-primary text-sm" style={{fontWeight:700}}>{progress}/24</span>

@@ -11,8 +11,7 @@ function Header() {
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-xl overflow-hidden shadow-sm shadow-primary/30">
             <img 
-              src="ogqIcon.png" 
-              alt="아이콘" 
+              src="/ogqIcon.png" 
               className="w-full h-full object-cover"
             />
           </div>
