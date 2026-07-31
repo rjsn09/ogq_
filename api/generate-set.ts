@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
-const SERVER_URL = "http://0.0.0.0:8000";
+const SERVER_URL = "https://romeo-bannerless-calmingly.ngrok-free.dev";
 
 function readRawBody(req: VercelRequest): Promise<Buffer> {
   return new Promise((resolve, reject) => {
