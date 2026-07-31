@@ -85,7 +85,7 @@ export default function GeneratedGrid({
   const handleGenerateClick = useCallback(() => {
     if (!onGenerate) return;
     if (selectedIds.size > 0) {
-      onGenerate([...selectedIds].sort((a, b) => a - b));
+      onGenerate([...selectedIds].map((i) => i + 1).sort((a, b) => a - b));
       setSelectedIds(new Set());
     } else {
       onGenerate(undefined);
@@ -263,7 +263,7 @@ export default function GeneratedGrid({
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          onGenerate([i]);
+                          onGenerate([i + 1]);
                         }}
                         title="이 칸만 재생성"
                         className="w-7 h-7 rounded-full bg-white/90 text-foreground flex items-center justify-center hover:bg-white transition-colors shadow-sm"

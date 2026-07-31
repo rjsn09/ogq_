@@ -3,6 +3,7 @@ import { useState, useCallback } from "react";
 import InputPanel from "./components/InputPanel";
 import GeneratedGrid from "./components/GeneratedGrid";
 import { generateOGQImages } from "./lib/ogqGenerator";
+import { VARIANT_CATALOG, DEFAULT_VARIANTS, Variant } from "./utils/imageGenerator";
 
 function Header() {
   return (
@@ -75,29 +76,64 @@ export default function App() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedImages, setGeneratedImages] = useState<string[]>([]);
   const [progress, setProgress] = useState(0);
+  const [slotVariants, setSlotVariants] = useState<Variant[]>(
+    Array.from({ length: 24 }, (_, i) => VARIANT_CATALOG[i] ?? DEFAULT_VARIANTS[i])
+  );
 
-  const handleGenerate = useCallback(async () => {
-    if (!uploadedImage || !title.trim()) return;
-    setIsGenerating(true);
-    setGeneratedImages([]);
-    setProgress(0);
+  const handleVariantChange = useCallback((slotIndex: number, variantId: string) => {
+    const variant = VARIANT_CATALOG.find((v) => v.id === variantId);
+    if (!variant) return;
+    setSlotVariants((prev) => {
+      const next = [...prev];
+      next[slotIndex] = variant;
+      return next;
+    });
+  }, []);
 
-    try {
-      await generateOGQImages(
-        uploadedImage,
-        (count, images) => {
-          setProgress(count);
-          setGeneratedImages(images);
-        },
-        description || undefined
-      );
-    } catch (err) {
-      console.error("이모티콘 생성 실패:", err);
-      alert(`생성 중 오류가 발생했습니다: ${(err as Error).message}`);
-    } finally {
-      setIsGenerating(false);
-    }
-  }, [uploadedImage, title, description]);
+  const handleGenerate = useCallback(
+    async (indices?: number[]) => {
+      if (!uploadedImage || !title.trim()) return;
+
+      const isPartial = !!indices && indices.length > 0;
+
+      const variantAssignments: Record<number, string> | undefined = isPartial
+        ? indices!.reduce((acc, idx1based) => {
+            acc[idx1based] =
+              slotVariants[idx1based - 1]?.name ??
+              DEFAULT_VARIANTS[idx1based - 1]?.name ??
+              `이모티콘 ${idx1based}`;
+            return acc;
+          }, {} as Record<number, string>)
+        : undefined;
+
+      setIsGenerating(true);
+      setProgress(0);
+
+      if (!isPartial) {
+        setGeneratedImages([]);
+      }
+
+      try {
+        await generateOGQImages(
+          uploadedImage,
+          (count, images) => {
+            setProgress(count);
+            setGeneratedImages(images);
+          },
+          description || undefined,
+          indices,
+          variantAssignments,
+          isPartial ? generatedImages : undefined
+        );
+      } catch (err) {
+        console.error("이모티콘 생성 실패:", err);
+        alert(`생성 중 오류가 발생했습니다: ${(err as Error).message}`);
+      } finally {
+        setIsGenerating(false);
+      }
+    },
+    [uploadedImage, title, description, generatedImages, slotVariants]
+  );
 
   const isReady = !!uploadedImage && !!title.trim();
 
@@ -144,6 +180,8 @@ export default function App() {
 
           <GeneratedGrid
             images={generatedImages}
+            slotVariants={slotVariants}
+            onVariantChange={handleVariantChange}
             isGenerating={isGenerating}
             progress={progress}
             title={title}

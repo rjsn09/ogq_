@@ -18,18 +18,20 @@ const POLL_INTERVAL_MS = 2000;
  * @param characterBase
  * @param indices
  * @param variantAssignments
- *
+ * @param previousImages
  */
 export async function generateOGQImages(
   imageDataUrl: string,
   onProgress?: (count: number, images: string[]) => void,
   characterBase?: string,
   indices?: number[],
-  variantAssignments?: Record<number, string>
+  variantAssignments?: Record<number, string>,
+  previousImages?: (string | null | undefined)[]
 ): Promise<string[]> {
   const refBlob = await (await fetch(imageDataUrl)).blob();
 
   const targetIndices = indices && indices.length > 0 ? indices : VARIANT_CATALOG.slice(0, 24).map((_, i) => i + 1);
+  const targetSet = new Set(targetIndices);
 
   const names: Record<number, string> = {};
   for (const idx of targetIndices) {
@@ -56,7 +58,7 @@ export async function generateOGQImages(
 
   const { job_id } = (await startRes.json()) as { job_id: string };
 
-  const results: string[] = new Array(24).fill('');
+  const results: string[] = Array.from({ length: 24 }, (_, i) => previousImages?.[i] ?? '');
 
   while (true) {
     await sleep(POLL_INTERVAL_MS);
@@ -73,7 +75,9 @@ export async function generateOGQImages(
     const job = (await statusRes.json()) as JobStatus;
 
     for (const item of job.images) {
-      results[item.index - 1] = item.image;
+      if (targetSet.has(item.index)) {
+        results[item.index - 1] = item.image;
+      }
     }
     onProgress?.(job.completed, [...results]);
 
@@ -84,14 +88,18 @@ export async function generateOGQImages(
   return results;
 }
 
+/**
+ * 선택한 슬롯만 생성하는 함수.
+ */
 export function regenerateOGQImages(
   imageDataUrl: string,
   slotIndices: number[],
   variantAssignments: Record<number, string>,
+  previousImages: (string | null | undefined)[],
   onProgress?: (count: number, images: string[]) => void,
   characterBase?: string
 ): Promise<string[]> {
-  return generateOGQImages(imageDataUrl, onProgress, characterBase, slotIndices, variantAssignments);
+  return generateOGQImages(imageDataUrl, onProgress, characterBase, slotIndices, variantAssignments, previousImages);
 }
 
 function sleep(ms: number) {
