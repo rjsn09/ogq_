@@ -1,32 +1,45 @@
 import { useState, useCallback, useMemo } from "react";
 import { Download, ZoomIn, X, CheckSquare, Square, ChevronLeft, ChevronRight, RotateCw, Check } from "lucide-react";
-import { VARIANT_CATALOG, Variant } from "../utils/imageGenerator";
+import { VARIANT_CATALOG, DEFAULT_VARIANTS, Variant } from "../utils/imageGenerator";
 
 interface GeneratedGridProps {
-  images: (string | null)[];
-  slotVariants: Variant[];
-  onVariantChange: (slotIndex: number, variantId: string) => void;
-  isGenerating: boolean;
-  progress: number;
+  images?: (string | null)[];
+  slotVariants?: Variant[];
+  onVariantChange?: (slotIndex: number, variantId: string) => void;
+  isGenerating?: boolean;
+  progress?: number;
   generatingIndices?: Set<number>;
-  title: string;
+  title?: string;
   onGenerate?: (indices?: number[]) => void;
   isReady?: boolean;
 }
 
 export default function GeneratedGrid({
-  images,
-  slotVariants,
-  onVariantChange,
-  isGenerating,
-  progress,
+  images: rawImages,
+  slotVariants: rawSlotVariants,
+  onVariantChange = () => {},
+  isGenerating = false,
+  progress = 0,
   generatingIndices,
-  title,
+  title = "",
   onGenerate,
   isReady,
 }: GeneratedGridProps) {
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [lightboxIdx, setLightboxIdx] = useState<number | null>(null);
+
+  const images = useMemo(
+    () => Array.from({ length: 24 }, (_, i) => rawImages?.[i] ?? null),
+    [rawImages]
+  );
+  const slotVariants = useMemo(
+    () =>
+      Array.from(
+        { length: 24 },
+        (_, i) => rawSlotVariants?.[i] ?? VARIANT_CATALOG[i] ?? DEFAULT_VARIANTS[i]
+      ),
+    [rawSlotVariants]
+  );
 
   const filledCount = useMemo(() => images.filter(Boolean).length, [images]);
   const isAllSelected = selectedIds.size === 24 && 24 > 0;
@@ -81,7 +94,6 @@ export default function GeneratedGrid({
 
   const hasImages = filledCount > 0;
 
-  // 하단 생성 버튼 라벨/활성 여부 계산
   const generateLabel = useMemo(() => {
     if (isGenerating) return `생성 중...`;
     if (selectedIds.size > 0) {
