@@ -18,10 +18,12 @@ interface JobStatus {
 
 const POLL_INTERVAL_MS = 2000;
 
-const API_BASE_URL = "https://romeo-bannerless-calmingly.ngrok-free.dev";
+// const SERVER_URL = "https://romeo-bannerless-calmingly.ngrok-free.dev";  // 무료 끝남
+const SERVER_URL = "boney-unvented-awry.ngrok-free.dev";
+// const SERVER_URL = "http://localhost:8000";  // 로컬
 
 function apiUrl(path: string): string {
-  return `${API_BASE_URL}${path}`;
+  return `${SERVER_URL}${path}`;
 }
 
 /**

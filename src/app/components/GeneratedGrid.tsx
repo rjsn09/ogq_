@@ -1,5 +1,6 @@
 import { useState, useCallback, useMemo } from "react";
 import { Download, ZoomIn, X, CheckSquare, Square, ChevronLeft, ChevronRight, RotateCw } from "lucide-react";
+import JSZip from "jszip";
 import { VARIANT_CATALOG, DEFAULT_VARIANTS, Variant } from "../utils/imageGenerator";
 
 interface GeneratedGridProps {
@@ -27,6 +28,7 @@ export default function GeneratedGrid({
 }: GeneratedGridProps) {
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [lightboxIdx, setLightboxIdx] = useState<number | null>(null);
+  const [isZipping, setIsZipping] = useState(false);
 
   const images = useMemo(
     () => Array.from({ length: 24 }, (_, i) => rawImages?.[i] ?? null),
@@ -72,15 +74,47 @@ export default function GeneratedGrid({
     [title]
   );
 
+  const downloadAsZip = useCallback(
+    async (targets: number[]) => {
+      setIsZipping(true);
+      try {
+        const zip = new JSZip();
+
+        targets.forEach((idx) => {
+          const dataUrl = images[idx] as string;
+          const base64 = dataUrl.split(",")[1];
+          const filename = `${title || "ogq_sticker"}_${String(idx + 1).padStart(2, "0")}.png`;
+          zip.file(filename, base64, { base64: true });
+        });
+
+        const blob = await zip.generateAsync({ type: "blob" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `${title || "ogq_sticker"}.zip`;
+        a.click();
+        URL.revokeObjectURL(url);
+      } finally {
+        setIsZipping(false);
+      }
+    },
+    [images, title]
+  );
+
   const downloadSelected = useCallback(() => {
     const targets =
       selectedFilledCount > 0
         ? [...selectedIds].filter((i) => !!images[i])
         : images.map((img, i) => (img ? i : -1)).filter((i) => i >= 0);
-    targets.forEach((idx, i) => {
-      setTimeout(() => downloadImage(images[idx] as string, idx), i * 120);
-    });
-  }, [selectedIds, selectedFilledCount, images, downloadImage]);
+
+    if (targets.length === 0) return;
+
+    if (targets.length === 1) {
+      downloadImage(images[targets[0]] as string, targets[0]);
+    } else {
+      downloadAsZip(targets);
+    }
+  }, [selectedIds, selectedFilledCount, images, downloadImage, downloadAsZip]);
 
   const handleGenerateClick = useCallback(() => {
     if (!onGenerate) return;
@@ -106,6 +140,12 @@ export default function GeneratedGrid({
     return hasImages ? "빈 칸 전체 생성하기" : "24장 이미지 생성하기";
   }, [isGenerating, selectedIds, selectedFilledCount, hasImages]);
 
+  const downloadButtonLabel = useMemo(() => {
+    if (isZipping) return "압축 중...";
+    if (selectedFilledCount > 0) return `${selectedFilledCount}장 다운로드`;
+    return "전체 다운로드";
+  }, [isZipping, selectedFilledCount]);
+
   return (
     <div className="flex flex-col gap-4">
       {/* Header */}
@@ -119,7 +159,7 @@ export default function GeneratedGrid({
           </span>
         </div>
         <div className="flex items-center gap-2">
-          <button
+          <button 
             onClick={selectAll}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-border bg-card text-foreground text-xs hover:bg-muted transition-colors"
             style={{ fontWeight: 500 }}
@@ -130,11 +170,16 @@ export default function GeneratedGrid({
           {hasImages && (
             <button
               onClick={downloadSelected}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary text-primary-foreground text-xs hover:brightness-105 transition-all shadow-sm shadow-primary/20"
+              disabled={isZipping}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary text-primary-foreground text-xs hover:brightness-105 transition-all shadow-sm shadow-primary/20 disabled:opacity-60 disabled:cursor-not-allowed"
               style={{ fontWeight: 600 }}
             >
-              <Download size={13} />
-              {selectedFilledCount > 0 ? `${selectedFilledCount}장 다운로드` : "전체 다운로드"}
+              {isZipping ? (
+                <span className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
+              ) : (
+                <Download size={13} />
+              )}
+              {downloadButtonLabel}
             </button>
           )}
         </div>

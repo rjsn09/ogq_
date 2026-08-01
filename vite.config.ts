@@ -37,7 +37,7 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: 'https://romeo-bannerless-calmingly.ngrok-free.dev',
+        target: 'http://localhost:8000',
         changeOrigin: true,
       },
     },

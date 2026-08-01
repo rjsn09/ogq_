@@ -80,3 +80,6 @@ npm run dev      # 개발 서버 실행
 파이썬 버전: python 3.13.12
 
 `os`, `gc`, `io`, `json`, `time`, `uuid`, `base64`, `logging`, `traceback`, `threading`, `contextlib`
+
+
+백엔드 서버를 상시로 켜놓을 수 없어 가끔 서버에 접속할 수 없을 수 있습니다..(양해 부탁드려요..)
