@@ -96,15 +96,17 @@ export default function App() {
 
       const isPartial = !!indices && indices.length > 0;
 
-      const variantAssignments: Record<number, string> | undefined = isPartial
-        ? indices!.reduce((acc, idx1based) => {
-            acc[idx1based] =
-              slotVariants[idx1based - 1]?.name ??
-              DEFAULT_VARIANTS[idx1based - 1]?.name ??
-              `이모티콘 ${idx1based}`;
-            return acc;
-          }, {} as Record<number, string>)
-        : undefined;
+      const targetIndices = indices && indices.length > 0
+        ? indices
+        : Array.from({ length: 24 }, (_, i) => i + 1);
+
+      const variantAssignments: Record<number, string> = targetIndices.reduce((acc, idx1based) => {
+        acc[idx1based] =
+          slotVariants[idx1based - 1]?.name ??
+          DEFAULT_VARIANTS[idx1based - 1]?.name ??
+          `이모티콘 ${idx1based}`;
+        return acc;
+      }, {} as Record<number, string>);
 
       setIsGenerating(true);
       setProgress(0);

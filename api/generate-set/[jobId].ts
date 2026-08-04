@@ -1,8 +1,8 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
 // const SERVER_URL = "https://romeo-bannerless-calmingly.ngrok-free.dev";  // 무료 끝남
-const SERVER_URL = "boney-unvented-awry.ngrok-free.dev";
-// const SERVER_URL = "http://localhost:8000"; // 로컬
+// const SERVER_URL = "boney-unvented-awry.ngrok-free.dev";
+const SERVER_URL = "http://localhost:8000"; // 로컬
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'GET') {

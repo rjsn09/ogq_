@@ -7,12 +7,14 @@ import io
 import json
 import time
 import uuid
+import csv
 import base64
 import logging
 import traceback
 import threading
 import torch
 import uvicorn
+import numpy as np
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -28,10 +30,11 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pyngrok import ngrok
 from contextlib import asynccontextmanager
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image
 
 from diffusers import AutoPipelineForText2Image, DPMSolverMultistepScheduler, AutoencoderKL
-from transformers import BlipProcessor, BlipForConditionalGeneration
+from huggingface_hub import hf_hub_download
+import onnxruntime as rt
 from compel import Compel, ReturnedEmbeddingsType
 from rembg import remove, new_session
 
@@ -69,6 +72,11 @@ class EmojiGenerator:
             torch_dtype=self.torch_dtype
         )
 
+        self._base_ip_scale = {
+            "up": {"block_0": [0.0, 1.0, 0.0]},  # up_blocks.0 (스타일 추출)
+        }
+        self.pipe.set_ip_adapter_scale(self._base_ip_scale)
+
         self.pipe.load_lora_weights(
             "lora_models",
             weight_name=lora_model,
@@ -89,25 +97,37 @@ class EmojiGenerator:
                 trigger = "cute doodle"
 
         self.base_positive = (
-            trigger + ","
-            "cute doodle, simple flat colors, chibi, 2-head proportion, "
-            "thick black lineart, no shading, minimal facial features, pure white background"
+            trigger + ", "
+            "(masterpiece, best quality, highly expressive emoji style, vector art, die-cut sticker, "
+            "chibi, 2-head proportion, exaggerated facial expressions, "
+            "thick black outlines, simple flat colors, cel shading:1.3), "
+            "clean pure white background, clear silhouette, perfect composition"
         )
+
         self.base_negative = (
-            "western comic, corporate vector art, realistic proportions, "
-            "detailed anime, masterpiece, shading, gradients, 3d, realistic, complex details, noise, background objects"
+            "western comic, realistic proportions, detailed anime, 3d, realistic, "
+            "complex shading, gradients, messy lines, cluttered background, "
+            "background objects, text issues, bad anatomy, missing limbs"
         )
 
         self.rembg_session = new_session("isnet-anime", providers=["CPUExecutionProvider"])
 
-        print("캡션 모델(BLIP) 로딩 중...")
-        self.caption_processor = BlipProcessor.from_pretrained(
-            "Salesforce/blip-image-captioning-base"
+        model_repo = "SmilingWolf/wd-v1-4-moat-tagger-v2"
+        
+        model_path = hf_hub_download(model_repo, "model.onnx")
+        csv_path = hf_hub_download(model_repo, "selected_tags.csv")
+        
+        self.tagger_session = rt.InferenceSession(
+            model_path, 
+            providers=['CUDAExecutionProvider', 'CPUExecutionProvider']
         )
-        self.caption_model = BlipForConditionalGeneration.from_pretrained(
-            "Salesforce/blip-image-captioning-base",
-            torch_dtype=self.torch_dtype,
-        ).to(self.device)
+        
+        self.tags = []
+        with open(csv_path, 'r', encoding='utf-8') as f:
+            reader = csv.reader(f)
+            next(reader)
+            for row in reader:
+                self.tags.append(row[1])
 
         self.compel = Compel(
             tokenizer=[self.pipe.tokenizer, self.pipe.tokenizer_2],
@@ -116,26 +136,42 @@ class EmojiGenerator:
             requires_pooled=[False, True]
         )
 
-    def caption_image(self, image: Image.Image) -> str:
-        """참조 이미지로 캡션 생성 (BLIP)."""
-        inputs = self.caption_processor(image.convert("RGB"), return_tensors="pt").to(
-            self.device, self.torch_dtype
-        )
-        with torch.inference_mode():
-            out_ids = self.caption_model.generate(**inputs, max_new_tokens=40)
-        caption = self.caption_processor.decode(out_ids[0], skip_special_tokens=True)
-        return caption.strip()
+    def _set_ip_scale(self, ip_scale: float=0.6):
+        scale = [w * ip_scale for w in self._base_ip_scale['up']['block_0']]
+        self.pipe.set_ip_adapter_scale({"up": {"block_0": scale}})
+
+    def caption_image(self, image: Image.Image, threshold: float = 0.35) -> str:
+        """참조 이미지로 캡션 생성 (WD14 Tagger)."""
+        
+        image = image.convert("RGBA")
+        new_image = Image.new("RGBA", image.size, "WHITE")
+        new_image.paste(image, mask=image)
+        image = new_image.convert("RGB")
+        
+        image = image.resize((448, 448), Image.Resampling.LANCZOS)
+        image_array = np.array(image, dtype=np.float32)
+        image_array = np.expand_dims(image_array, axis=0) 
+        
+        input_name = self.tagger_session.get_inputs()[0].name
+        probs = self.tagger_session.run(None, {input_name: image_array})[0][0]
+        
+        result_tags = []
+        for i, p in enumerate(probs):
+            if i >= 4 and p > threshold:
+                result_tags.append(self.tags[i])
+                
+        final_caption = ", ".join(result_tags)
+        return final_caption
 
     def generate_image(
         self,
         description: str,
-        text_label: str = "",
         ref_image: Image.Image = None,
-        ip_scale: float = 0.18,
+        ip_scale: float = 0.6,
         num_inference_steps: int = 8,
     ) -> Image.Image:
         """PIL.Image를 바로 반환"""
-        final_prompt = f"({description}:1.3), {self.base_positive}"
+        final_prompt = f"{description}, {self.base_positive}"
 
         prompt_embeds, pooled_prompt_embeds = self.compel(final_prompt)
         negative_prompt_embeds, negative_pooled_prompt_embeds = self.compel(self.base_negative)
@@ -168,48 +204,48 @@ class EmojiGenerator:
         return transparent_img
 
 
-# 기본 24종
+# 기본 24종 (감정 과장 및 시각 효과 강화)
 VARIANT_PROMPTS = [
-    ("기본",     "standing neutral, gentle relaxed smile, simple idle pose"),
-    ("활짝 웃음", "wide open mouth smile, sparkling bright eyes, cheerful energetic pose"),
-    ("수줍음",   "shy blushing cheeks, looking away bashfully, fidgeting hands"),
-    ("졸려요",   "half closed sleepy eyes, big yawn, droopy tired pose"),
-    ("화났어요", "puffed angry cheeks, red steam aura around head, clenched fists"),
-    ("슬퍼요",   "big glossy teary eyes, drooping shoulders, small raincloud above head"),
-    ("깜짝!",    "jaw dropped shock face, wide surprised eyes, jumping back"),
-    ("사랑해요", "making heart shape with both hands above head, blushing heart eyes"),
-    ("생각중",   "hand on chin, head tilted, thought bubble with question mark"),
-    ("굿!",      "giant thumbs up close to camera, confident proud smile"),
-    ("OK!",      "making OK sign with fingers, confident wink"),
-    ("파이팅!",  "raised fist pumping into the air, determined shouting face"),
-    ("하하하",   "laughing out loud, eyes closed happily, hand on belly"),
-    ("당황",     "flustered red cheeks, single sweat drop, awkward frozen smile"),
-    ("신남!",    "jumping with joy, confetti and sparkles flying around, wide grin"),
-    ("힘들어요", "slouched exhausted pose, dark circles under eyes, sigh cloud from mouth"),
-    ("배고파",   "drooling slightly, eyes fixed hungrily forward, growling empty tummy"),
-    ("냠냠",     "eating happily, cheeks puffed full, crumbs on face, satisfied smile"),
-    ("잘게요",   "lying down eyes closed, floating Zzz bubbles, hugging a pillow"),
-    ("안녕!",    "waving one hand high, bright friendly welcoming smile"),
-    ("감사해요", "bowing slightly, hands clasped together, warm grateful smile"),
-    ("미안해요", "bowing deeply, single sweat drop, worried apologetic face"),
-    ("응원해요", "holding a small megaphone, cheering pose, sparkling energetic eyes"),
-    ("최고야!",  "sparkling star-shaped eyes, both thumbs up, triumphant proud pose"),
+    ("기본",      "neutral face, soft gentle smile, relaxed standing pose, looking at viewer"),
+    ("활짝 웃음", "wide open mouth smile, sparkling bright eyes, cheerful energetic pose, floating text 'HAHAHA', joyful atmosphere"),
+    ("수줍음",    "shy blushing red cheeks, looking away bashfully, index fingers touching together, nervous sweet smile"),
+    ("졸려요",    "half-closed sleepy eyes, big wide yawn, droopy tired posture, floating Zzz sleep bubbles"),
+    ("화났어요",  "puffed angry cheeks, prominent red cross popping vein symbol on head, steam blowing from ears, clenched fists"),
+    ("슬퍼요",    "big glossy teary eyes, crying, drooping shoulders, small dark raincloud hovering above head, gloomy aura"),
+    ("깜짝!",     "jaw-dropped shocked face, wide unblinking eyes, jumping back in surprise, exclamation marks in background"),
+    ("사랑해요",  "making a large heart shape with both arms above head, blushing heart-shaped eyes, floating pink hearts"),
+    ("생각중",    "hand resting on chin, head tilted, looking up slightly, large thought bubble with a question mark"),
+    ("굿!",       "giant thumbs up close to the camera, confident proud smile, sparkling white teeth"),
+    ("OK!",       "making OK hand sign with fingers, confident playful wink, floating text 'OK'"),
+    ("파이팅!",   "raised fist pumping high into the air, determined shouting face, burning passionate background effects"),
+    ("하하하",    "laughing out loud joyfully, eyes closed tight happily, hand holding belly, joyful tears, text 'HAHAHA'"),
+    ("당황",      "flustered deeply blushing cheeks, multiple large sweat drops on forehead, awkward frozen smile, trembling slightly"),
+    ("신남!",     "jumping high with joy, arms raised, flying colorful confetti and sparkling stars, ecstatic wide grin"),
+    ("힘들어요",  "slouched exhausted posture, dark heavy circles under eyes, sighing cloud coming from mouth, deflated body"),
+    ("배고파",    "drooling slightly from mouth, eyes fixed hungrily forward, holding stomach, growling empty tummy effects"),
+    ("냠냠",      "eating happily, cheeks puffed full of food, cute crumbs on face, satisfied delicious smile"),
+    ("잘게요",    "lying down curled up, eyes closed peacefully, hugging a soft pillow, floating Zzz bubbles"),
+    ("안녕!",     "waving one hand high enthusiastically, bright friendly welcoming smile, looking directly at viewer"),
+    ("감사해요",  "bowing slightly forward, hands clasped together in gratitude, warm gentle grateful smile"),
+    ("미안해요",  "bowing deeply in apology, single giant sweat drop, worried apologetic eyebrows, puppy-dog eyes"),
+    ("응원해요",  "holding a small colorful megaphone, enthusiastic cheering pose, sparkling energetic eyes"),
+    ("최고야!",   "sparkling star-shaped eyes, double thumbs up, triumphant proud pose, golden glowing background"),
 ]
 
 # 추가 12종
 EXTRA_VARIANT_PROMPTS = [
-    ("박수쳐요", "clapping hands enthusiastically, delighted applauding pose"),
-    ("안아줘요", "arms wide open asking for a hug, warm affectionate smile"),
-    ("토닥토닥", "gently patting forward with one hand, comforting caring expression"),
-    ("메롱",     "sticking tongue out playfully, one eye winking, teasing pose"),
-    ("엉엉",     "bawling loudly, streams of tears, scrunched crying face"),
-    ("두근두근", "hands clasped over chest, blushing, floating heart bubbles"),
-    ("헐...",    "frozen stunned expression, wide blank eyes, disbelief"),
-    ("땀뻘뻘",   "nervous strained smile, multiple large sweat drops, tense pose"),
-    ("축하해요", "throwing confetti and party poppers, joyful celebrating pose"),
-    ("반가워요", "leaning forward waving both hands, delighted welcoming grin"),
-    ("시무룩",   "slouched pouting, downturned mouth, gloomy deflated pose"),
-    ("으쓱",     "shrugging shoulders, smug closed-eye smile, hands out"),
+    ("박수쳐요",  "clapping both hands enthusiastically, delighted applauding pose, motion blur on hands, beaming smile"),
+    ("안아줘요",  "arms wide open reaching out for a hug, warm affectionate smile, inviting posture"),
+    ("토닥토닥",  "gently patting forward with one hand, comforting caring expression, soft warm lighting"),
+    ("메롱",      "sticking tongue out playfully, one eye winking, cheeky teasing pose, hand pulling down lower eyelid lightly"),
+    ("엉엉",      "bawling loudly, exaggerated cartoonish streams of tears flowing, scrunched up crying face, hitting the floor"),
+    ("두근두근",  "both hands clasped tightly over chest, deep blushing, floating pulsating heart bubbles, excited anticipating eyes"),
+    ("헐...",     "frozen stunned expression, wide blank dot eyes, complete disbelief, losing color/turning grayscale slightly"),
+    ("땀뻘뻘",    "nervous strained smile, extreme sweating with multiple large sweat drops, tense rigid pose, shaking"),
+    ("축하해요",  "popping a party popper, throwing confetti, joyful celebrating pose, wearing a party hat"),
+    ("반가워요",  "leaning forward waving both hands rapidly, delighted welcoming grin, bright aura"),
+    ("시무룩",    "slouched sitting on the ground, pouting lips, downturned mouth, gloomy deflated pose, dark shadow on face"),
+    ("으쓱",      "shrugging shoulders high, palms facing up, smug closed-eye smile, 'I don't know' casual pose"),
 ]
 
 VARIANT_PROMPT_MAP: dict[str, str] = {name: desc for name, desc in VARIANT_PROMPTS + EXTRA_VARIANT_PROMPTS}
@@ -362,12 +398,11 @@ def _run_job_inner(
     done = 0
     for idx, name_kr in targets:
         desc = VARIANT_PROMPT_MAP.get(name_kr, name_kr)
-        full_desc = f"{desc}, {merged_character_base}" if merged_character_base else desc
+        full_desc = f"{desc}, ({merged_character_base}:1.3)" if merged_character_base else desc
 
         try:
             out_img = generator.generate_image(
                 description=full_desc,
-                text_label=name_kr,
                 ref_image=ref_img,
                 ip_scale=ip_scale,
                 num_inference_steps=num_inference_steps,
@@ -407,7 +442,7 @@ async def create_job(
     background_tasks: BackgroundTasks,
     image: UploadFile = File(...),
     character_base: str = Form(""),
-    ip_scale: float = Form(0.5),
+    ip_scale: float = Form(0.6),
     num_inference_steps: int = Form(16),
     indices: str = Form(""),
     variant_names: str = Form(""),
