@@ -183,7 +183,7 @@ class EmojiGenerator:
             input_image = Image.new("RGB", (224, 224), (0, 0, 0))
             current_scale = 0.0
 
-        self.pipe.set_ip_adapter_scale(current_scale)
+        self._set_ip_scale(current_scale)
 
         with torch.inference_mode():
             generated_img = self.pipe(
