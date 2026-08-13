@@ -40,7 +40,7 @@ from rembg import remove, new_session
 
 
 class EmojiGenerator:
-    def __init__(self, model_id="stabilityai/stable-diffusion-xl-base-1.0", lora_model="Zzul02.safetensors"):
+    def __init__(self, model_id="stabilityai/stable-diffusion-xl-base-1.0", lora_model="emoji_style_v2-000002.safetensors"):
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.torch_dtype = torch.float16
 
@@ -83,7 +83,7 @@ class EmojiGenerator:
             adapter_name="emoji_style"
         )
 
-        self.pipe.set_adapters(["emoji_style"], adapter_weights=[0.75])
+        self.pipe.set_adapters(["emoji_style"], adapter_weights=[0.87])
 
         self.pipe.enable_model_cpu_offload()
         self.pipe.vae.enable_slicing()
@@ -136,7 +136,7 @@ class EmojiGenerator:
             requires_pooled=[False, True]
         )
 
-    def _set_ip_scale(self, ip_scale: float=0.6):
+    def _set_ip_scale(self, ip_scale: float=0.8):
         scale = [w * ip_scale for w in self._base_ip_scale['up']['block_0']]
         self.pipe.set_ip_adapter_scale({"up": {"block_0": scale}})
 
@@ -167,7 +167,7 @@ class EmojiGenerator:
         self,
         description: str,
         ref_image: Image.Image = None,
-        ip_scale: float = 0.6,
+        ip_scale: float = 0.8,
         num_inference_steps: int = 8,
     ) -> Image.Image:
         """PIL.Image를 바로 반환"""
