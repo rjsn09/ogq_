@@ -87,3 +87,4 @@ npm run dev      # 개발 서버 실행
 -> 기존의 BLIP모델 대신 WD14 Tagger를 사용하여 캡션을 생성
 set_ip_adapter_scale에 값을 실수 형태로 넣으니 참조이미지의 구도, 체형 등 이모티콘에 참조하지 말아야할 특징까지 참조됨
 ->  _set_ip_scale함수를 만들어{"up": {"block_0": scale}}의 딕셔너리 형식으로 ip_scale를 조정해 얼굴과 옷 등 필요한 특징만 가져옴
+ 
